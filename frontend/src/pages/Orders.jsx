@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { DB, fmt, fmtDate, genId } from '../db';
 import { useApp } from '../AppContext';
 import { Badge, Modal, OrderProgress, EmptyState } from '../components/UI';
@@ -53,6 +53,17 @@ function advanceOrderStatus(orderId, nextStatus, toast, onRefresh) {
     sendSMSAction(orderId, toast, onRefresh);
   } else {
     onRefresh();
+  }
+}
+
+export function getNextAction(status) {
+  switch (status) {
+    case 'pending':  return { label: '▶ Start Wash', confirmLabel: ' Tap to Confirm Wash', next: 'washing', color: 'btn-wash' };
+    case 'washing':  return { label: '💨 To Dryer',  confirmLabel: ' Tap to Confirm Dryer', next: 'drying',  color: 'btn-dry'  };
+    case 'drying':   return { label: '👕 Fold & Pack', confirmLabel: ' Tap to Confirm Fold', next: 'folding', color: 'btn-fold' };
+    case 'folding':  return { label: '📱 Ready & SMS', confirmLabel: ' Tap to Confirm Ready', next: 'ready',   color: 'btn-ready' };
+    case 'ready':    return { label: '✅ Handover',    confirmLabel: ' Tap to Complete', next: 'completed', color: 'btn-handover' };
+    default: return null;
   }
 }
 
@@ -296,10 +307,13 @@ function OrderModal({ orderId, onClose, onSaved, toast, isCpMode }) {
   );
 }
 
-function ViewOrderModal({ orderId, onClose, isCpMode }) {
+function ViewOrderModal({ orderId, onClose, onAdvance, canEdit, isCpMode }) {
   const order = DB.get('orders').find(o => o.id === orderId);
   if (!order) return null;
   const isWalkin = order.walkin || order.customerId === 'walkin';
+  const action = getNextAction(order.status);
+  const [confirming, setConfirming] = useState(false);
+  const timerRef = useRef(null);
 
   const bodyContent = (
     <div>
@@ -347,6 +361,37 @@ function ViewOrderModal({ orderId, onClose, isCpMode }) {
     </div>
   );
 
+  const footerBtns = (
+    <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+      <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Close</button>
+      {action && canEdit && (
+        <button
+          className={`btn ${action.color} ${confirming ? 'btn-confirm-pulse' : ''}`}
+          style={{ flex: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+          onClick={() => {
+            if (confirming) {
+              if (timerRef.current) clearTimeout(timerRef.current);
+              onClose();
+              if (onAdvance) onAdvance(order, action);
+            } else {
+              setConfirming(true);
+              timerRef.current = setTimeout(() => setConfirming(false), 4500);
+            }
+          }}
+        >
+          {confirming ? (
+            <>
+              <span className="confirm-pulse-dot">●</span>
+              <span>{action.confirmLabel}</span>
+            </>
+          ) : (
+            action.label
+          )}
+        </button>
+      )}
+    </div>
+  );
+
   if (isCpMode) {
     return (
       <AndroidBottomSheet
@@ -354,7 +399,7 @@ function ViewOrderModal({ orderId, onClose, isCpMode }) {
         onClose={onClose}
         title={`Order ${order.id}`}
         subtitle="Order Specification"
-        footer={<button className="btn btn-secondary w-full" onClick={onClose}>Close Details</button>}
+        footer={footerBtns}
       >
         {bodyContent}
       </AndroidBottomSheet>
@@ -362,7 +407,7 @@ function ViewOrderModal({ orderId, onClose, isCpMode }) {
   }
 
   return (
-    <Modal title={`Order ${order.id}`} onClose={onClose} footer={<button className="btn btn-secondary" onClick={onClose}>Close</button>}>
+    <Modal title={`Order ${order.id}`} onClose={onClose} footer={footerBtns}>
       {bodyContent}
     </Modal>
   );
@@ -375,7 +420,31 @@ export default function Orders() {
   const [, setTick]           = useState(0);
   const [editId, setEditId]   = useState(undefined);
   const [viewId, setViewId]   = useState(null);
-  const searchRef = useRef(null);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const confirmTimerRef       = useRef(null);
+  const searchRef             = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
+
+  function handleActionClick(order, action, e) {
+    if (e) e.stopPropagation();
+
+    if (confirmingId === order.id) {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirmingId(null);
+      advanceOrderStatus(order.id, action.next, toast, () => setTick(t => t + 1));
+    } else {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirmingId(order.id);
+      confirmTimerRef.current = setTimeout(() => {
+        setConfirmingId(prev => (prev === order.id ? null : prev));
+      }, 4500);
+    }
+  }
 
   const canCreate = ['admin', 'staff'].includes(currentUser.role);
   const canEdit   = ['admin', 'staff'].includes(currentUser.role);
@@ -402,17 +471,6 @@ export default function Orders() {
     );
   }
   orders = orders.sort((a, b) => new Date(b.created) - new Date(a.created));
-
-  function getNextAction(status) {
-    switch (status) {
-      case 'pending':  return { label: '▶ Start Wash', next: 'washing', color: 'btn-wash' };
-      case 'washing':  return { label: '💨 To Dryer',  next: 'drying',  color: 'btn-dry'  };
-      case 'drying':   return { label: '👕 Fold & Pack', next: 'folding', color: 'btn-fold' };
-      case 'folding':  return { label: '📱 Ready & SMS', next: 'ready',   color: 'btn-ready' };
-      case 'ready':    return { label: '✅ Handover',    next: 'completed', color: 'btn-handover' };
-      default: return null;
-    }
-  }
 
   /* ─────────────────────────────────────────────────────────────
      CELLPHONE ("CP") UI/UX FOR STAFF & CUSTOMER
@@ -542,10 +600,32 @@ export default function Orders() {
                   <div className="card-actions-bar">
                     {action && canEdit && (
                       <button
-                        className={`btn-hero-action ${action.color}`}
-                        onClick={() => advanceOrderStatus(order.id, action.next, toast, () => setTick(t => t + 1))}
+                        className={`btn-hero-action ${action.color} ${confirmingId === order.id ? 'btn-confirm-pulse' : ''}`}
+                        onClick={(e) => handleActionClick(order, action, e)}
                       >
-                        {action.label}
+                        {confirmingId === order.id ? (
+                          <>
+                            <span className="confirm-pulse-dot">●</span>
+                            <span>{action.confirmLabel}</span>
+                          </>
+                        ) : (
+                          action.label
+                        )}
+                      </button>
+                    )}
+
+                    {confirmingId === order.id && (
+                      <button
+                        type="button"
+                        className="icon-action-btn btn-cancel-confirm"
+                        title="Cancel"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                          setConfirmingId(null);
+                        }}
+                      >
+                        ✕
                       </button>
                     )}
 
@@ -593,7 +673,15 @@ export default function Orders() {
             isCpMode={true}
           />
         )}
-        {viewId && <ViewOrderModal orderId={viewId} onClose={() => setViewId(null)} isCpMode={true} />}
+        {viewId && (
+          <ViewOrderModal
+            orderId={viewId}
+            onClose={() => setViewId(null)}
+            onAdvance={(o, act) => advanceOrderStatus(o.id, act.next, toast, () => setTick(t => t + 1))}
+            canEdit={canEdit}
+            isCpMode={true}
+          />
+        )}
       </div>
     );
   }
@@ -639,33 +727,67 @@ export default function Orders() {
               {orders.length === 0 ? (
                 <tr><td colSpan={10}><EmptyState icon="📭" text="No orders found" /></td></tr>
               ) : (
-                orders.map(o => (
-                  <tr key={o.id}>
-                    <td className="text-cyan font-mono" style={{ fontSize: '12px' }}>{o.id}</td>
-                    <td className="fw-600">
-                      {o.customerName}
-                      {(o.walkin || o.customerId === 'walkin') && (
-                        <span className="walkin-badge ml-6">Walk-in</span>
-                      )}
-                    </td>
-                    <td className="text-muted text-sm">{o.customerPhone || '—'}</td>
-                    <td>{o.serviceName}</td>
-                    <td>{o.quantity} {o.unit}</td>
-                    <td className="text-warning fw-600">{fmt(o.amount)}</td>
-                    <td className="text-sm">{fmtDate(o.dateIn)}</td>
-                    <td><Badge status={o.status} /></td>
-                    <td>{o.smsNotified ? <span className="badge badge-sent">✓ Sent</span> : <span className="text-muted text-xs">—</span>}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn btn-secondary btn-sm" onClick={() => setViewId(o.id)}>👁 View</button>
-                        {canEdit && <button className="btn btn-warning btn-sm" onClick={() => setEditId(o.id)}>✏️</button>}
-                        {canEdit && o.status === 'ready' && !o.smsNotified && o.customerPhone && (
-                          <button className="btn btn-success btn-sm" onClick={() => sendSMSAction(o.id, toast, () => setTick(t => t + 1))}>📱 SMS</button>
+                orders.map(o => {
+                  const action = getNextAction(o.status);
+                  return (
+                    <tr key={o.id}>
+                      <td className="text-cyan font-mono" style={{ fontSize: '12px' }}>{o.id}</td>
+                      <td className="fw-600">
+                        {o.customerName}
+                        {(o.walkin || o.customerId === 'walkin') && (
+                          <span className="walkin-badge ml-6">Walk-in</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="text-muted text-sm">{o.customerPhone || '—'}</td>
+                      <td>{o.serviceName}</td>
+                      <td>{o.quantity} {o.unit}</td>
+                      <td className="text-warning fw-600">{fmt(o.amount)}</td>
+                      <td className="text-sm">{fmtDate(o.dateIn)}</td>
+                      <td><Badge status={o.status} /></td>
+                      <td>{o.smsNotified ? <span className="badge badge-sent">✓ Sent</span> : <span className="text-muted text-xs">—</span>}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          {action && canEdit && (
+                            <button
+                              className={`btn btn-sm ${action.color} ${confirmingId === o.id ? 'btn-confirm-pulse' : ''}`}
+                              onClick={(e) => handleActionClick(o, action, e)}
+                              title={confirmingId === o.id ? 'Click again to confirm' : `Advance to ${action.next}`}
+                            >
+                              {confirmingId === o.id ? (
+                                <>
+                                  <span className="confirm-pulse-dot">●</span>
+                                  <span>{action.confirmLabel}</span>
+                                </>
+                              ) : (
+                                action.label
+                              )}
+                            </button>
+                          )}
+                          {confirmingId === o.id && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-cancel-confirm"
+                              style={{ padding: '4px 8px' }}
+                              title="Cancel"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                                setConfirmingId(null);
+                              }}
+                            >
+                              ✕
+                            </button>
+                          )}
+                          <button className="btn btn-secondary btn-sm" onClick={() => setViewId(o.id)}>👁 View</button>
+                          {canEdit && <button className="btn btn-warning btn-sm" onClick={() => setEditId(o.id)}>✏️</button>}
+                          {canEdit && o.status === 'ready' && !o.smsNotified && o.customerPhone && (
+                            <button className="btn btn-success btn-sm" onClick={() => sendSMSAction(o.id, toast, () => setTick(t => t + 1))}>📱 SMS</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -681,7 +803,15 @@ export default function Orders() {
           isCpMode={false}
         />
       )}
-      {viewId && <ViewOrderModal orderId={viewId} onClose={() => setViewId(null)} isCpMode={false} />}
+      {viewId && (
+        <ViewOrderModal
+          orderId={viewId}
+          onClose={() => setViewId(null)}
+          onAdvance={(o, act) => advanceOrderStatus(o.id, act.next, toast, () => setTick(t => t + 1))}
+          canEdit={canEdit}
+          isCpMode={false}
+        />
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export default function AndroidBottomSheet({ isOpen, onClose, title, subtitle, children, footer }) {
   useEffect(() => {
@@ -14,7 +15,7 @@ export default function AndroidBottomSheet({ isOpen, onClose, title, subtitle, c
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="android-sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="android-sheet" role="dialog" aria-modal="true">
         {/* Grab Handle */}
@@ -45,6 +46,7 @@ export default function AndroidBottomSheet({ isOpen, onClose, title, subtitle, c
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

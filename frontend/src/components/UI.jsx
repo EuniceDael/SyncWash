@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { fmt, fmtDate } from '../db';
 
 export function Badge({ status }) {
@@ -23,7 +24,7 @@ export function StatCard({ accent, icon, iconBg, value, label, trend }) {
 }
 
 export function Modal({ id, title, children, footer, onClose }) {
-  return (
+  return createPortal(
     <div className="modal-overlay open" id={id} onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
@@ -33,7 +34,8 @@ export function Modal({ id, title, children, footer, onClose }) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -19,7 +19,7 @@ function PickupBarcode({ orderId }) {
         ))}
       </div>
       <div className="barcode-number">{orderId}</div>
-      <div className="barcode-instruction">Present this barcode or Order ID to counter staff</div>
+      <div className="barcode-instruction">Present this barcode to counter staff</div>
     </div>
   );
 }
