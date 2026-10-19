@@ -1,122 +1,207 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { AppProvider, useApp } from './AppContext';
+import { seedData, DB } from './db';
+import LoginPage   from './pages/LoginPage';
+import Dashboard   from './pages/Dashboard';
+import Orders      from './pages/Orders';
+import Users       from './pages/Users';
+import Services    from './pages/Services';
+import SMS         from './pages/SMS';
+import Reports     from './pages/Reports';
+import SystemConfig from './pages/SystemConfig';
+import Track       from './pages/Track';
+import MyOrders    from './pages/MyOrders';
+import Profile     from './pages/Profile';
+import NewOrder    from './pages/NewOrder';
+import Sidebar     from './components/Sidebar';
+import Topbar      from './components/Topbar';
+import Toast       from './components/Toast';
 
-function App() {
-  const [count, setCount] = useState(0)
+// Android Cellphone Components
+import AndroidStatusBar from './components/AndroidStatusBar';
+import AndroidTopBar    from './components/AndroidTopBar';
+import AndroidBottomNav from './components/AndroidBottomNav';
+
+seedData();
+
+function getDefaultPage(role) {
+  if (role === 'customer') return 'track';
+  if (role === 'staff')    return 'orders';
+  return 'dashboard';
+}
+
+function MobileAndroidShell({ page, setPage, trackOrderId, setTrackId, smsBadge }) {
+  const { toggleCpMode } = useApp();
+  const [usePhoneFrame, setUsePhoneFrame] = useState(true);
+
+  function navigateTo(pageId, orderId = null) {
+    setPage(pageId);
+    if (pageId === 'track' && orderId) setTrackId(orderId);
+    else setTrackId(null);
+  }
+
+  const pageProps = { onNavigate: navigateTo };
+
+  const content = (
+    <div className="android-screen-wrapper">
+      {/* 1. Android System Status Bar */}
+      <AndroidStatusBar />
+
+      {/* 2. Material Top App Bar */}
+      <AndroidTopBar
+        currentPage={page}
+        onNavigate={navigateTo}
+        smsBadge={smsBadge}
+      />
+
+      {/* 3. Scrollable Page Content */}
+      <main className="android-content-area" id="androidScrollContainer">
+        {page === 'orders'    && <Orders />}
+        {page === 'track'     && <Track initOrderId={trackOrderId} />}
+        {page === 'myorders'  && <MyOrders {...pageProps} />}
+        {page === 'neworder'  && <NewOrder {...pageProps} />}
+        {page === 'services'  && <Services {...pageProps} />}
+        {page === 'sms'       && <SMS />}
+        {page === 'profile'   && <Profile />}
+        {page === 'dashboard' && <Dashboard {...pageProps} />}
+        {page === 'users'     && <Users />}
+        {page === 'reports'   && <Reports />}
+        {page === 'system'    && <SystemConfig />}
+      </main>
+
+      {/* 4. Material 3 Bottom Navigation Bar */}
+      <AndroidBottomNav
+        currentPage={page}
+        onNavigate={navigateTo}
+        smsBadge={smsBadge}
+      />
+    </div>
+  );
+
+  return (
+    <div className={`android-app-container ${usePhoneFrame ? 'with-phone-frame' : 'full-screen-mode'}`}>
+      {/* Desktop Preview Controller Pill */}
+      <div className="desktop-device-controls" title="Toggle between Phone Mockup and Full-Screen Mobile view">
+        <span className="control-label">📱 CP Mode:</span>
+        <button
+          type="button"
+          className={`device-btn ${usePhoneFrame ? 'active' : ''}`}
+          onClick={() => setUsePhoneFrame(true)}
+        >
+          Phone Frame
+        </button>
+        <button
+          type="button"
+          className={`device-btn ${!usePhoneFrame ? 'active' : ''}`}
+          onClick={() => setUsePhoneFrame(false)}
+        >
+          Full View
+        </button>
+        <button
+          type="button"
+          className="device-btn"
+          style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}
+          onClick={toggleCpMode}
+        >
+          🖥️ Back to Desktop UI
+        </button>
+      </div>
+
+      {usePhoneFrame ? (
+        <div className="android-device-bezel">
+          <div className="android-device-speaker" />
+          <div className="android-device-screen">
+            {content}
+          </div>
+        </div>
+      ) : (
+        <div className="android-full-wrapper">
+          {content}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DesktopShell({ page, setPage, trackOrderId, setTrackId, smsBadge }) {
+  function navigateTo(pageId, orderId = null) {
+    setPage(pageId);
+    if (pageId === 'track' && orderId) setTrackId(orderId);
+    else setTrackId(null);
+  }
+
+  const pageProps = { onNavigate: navigateTo };
+
+  return (
+    <div id="app" className="visible">
+      <Sidebar currentPage={page} onNavigate={navigateTo} smsBadge={smsBadge} />
+      <div className="main-content">
+        <Topbar currentPage={page} />
+        <div className="page-wrapper">
+          {page === 'dashboard' && <Dashboard {...pageProps} />}
+          {page === 'orders'    && <Orders />}
+          {page === 'users'     && <Users />}
+          {page === 'services'  && <Services {...pageProps} />}
+          {page === 'sms'       && <SMS />}
+          {page === 'reports'   && <Reports />}
+          {page === 'system'    && <SystemConfig />}
+          {page === 'track'     && <Track initOrderId={trackOrderId} />}
+          {page === 'myorders'  && <MyOrders {...pageProps} />}
+          {page === 'neworder'  && <NewOrder {...pageProps} />}
+          {page === 'profile'   && <Profile />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppShell() {
+  const { currentUser, isCpMode } = useApp();
+  const [page, setPage]           = useState(null);
+  const [trackOrderId, setTrackId] = useState(null);
+
+  useEffect(() => {
+    if (currentUser) setPage(getDefaultPage(currentUser.role));
+  }, [currentUser]);
+
+  const smsBadge = DB.get('smsLogs').filter(l => l.status === 'failed').length;
+
+  if (!currentUser) return <LoginPage />;
+
+  // If using cellphone ("cp") mode (either actual mobile screen <= 768px, or toggled on desktop):
+  // Both Staff and Customer see the cellphone (cp) UI/UX!
+  // When on desktop, Staff and Customer see the ORIGINAL UI/UX!
+  const showCpView = isCpMode && (currentUser.role === 'staff' || currentUser.role === 'customer');
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      {showCpView ? (
+        <MobileAndroidShell
+          page={page}
+          setPage={setPage}
+          trackOrderId={trackOrderId}
+          setTrackId={setTrackId}
+          smsBadge={smsBadge}
+        />
+      ) : (
+        <DesktopShell
+          page={page}
+          setPage={setPage}
+          trackOrderId={trackOrderId}
+          setTrackId={setTrackId}
+          smsBadge={smsBadge}
+        />
+      )}
+      <div className="bg-grid" />
+      <Toast />
     </>
-  )
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <AppProvider>
+      <AppShell />
+    </AppProvider>
+  );
+}
