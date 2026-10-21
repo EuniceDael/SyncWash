@@ -1,6 +1,7 @@
 import { useState } from "react"
 import Pricing from "./components/Pricing"
 
+
 type IconName = "bag" | "calendar" | "check" | "chevron" | "clock" | "home" | "minus" | "plus" | "sparkle"
 
 function Icon({
@@ -122,7 +123,7 @@ export default function App() {
               <div className="grid size-9 place-items-center rounded-xl bg-brand text-white">
                 <Icon name="sparkle" className="size-4" />
               </div>
-              <span className="font-display text-lg font-bold">Rinsewell</span>
+              <span className="font-display text-lg font-bold">SyncWash</span>
             </div>
             <div className="hidden lg:block">
               <p className="text-sm font-medium text-muted">Tuesday, May 14</p>
