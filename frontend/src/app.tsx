@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Pricing from "./components/Pricing"
+import { AuthUser, getApiErrorMessage, getCurrentUser, logout } from "./lib/auth"
 
 
 type IconName = "bag" | "calendar" | "check" | "chevron" | "clock" | "home" | "minus" | "plus" | "sparkle"
@@ -75,6 +76,72 @@ export default function App() {
   const [day, setDay] = useState(1)
   const [bags, setBags] = useState(1)
   const [scheduled, setScheduled] = useState(false)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [authError, setAuthError] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    getCurrentUser()
+      .then((currentUser) => {
+        if (!active) return
+        if (!currentUser) {
+          window.location.assign("/login.html")
+          return
+        }
+        setUser(currentUser)
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setAuthError(getApiErrorMessage(error))
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function handleLogout() {
+    setAuthError("")
+    setIsSigningOut(true)
+
+    try {
+      await logout()
+      window.location.assign("/login.html")
+    } catch (error) {
+      setAuthError(getApiErrorMessage(error))
+      setIsSigningOut(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-canvas text-muted">
+        Checking your session...
+      </main>
+    )
+  }
+
+  if (authError && !user) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-canvas px-5 text-ink">
+        <section className="max-w-md rounded-3xl border border-line bg-white p-7 text-center shadow-card">
+          <p role="alert">{authError}</p>
+          <button
+            className="mt-5 rounded-2xl bg-brand px-5 py-3 text-sm font-bold text-white"
+            onClick={() => window.location.reload()}
+          >
+            Try again
+          </button>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen bg-canvas text-ink">
@@ -128,24 +195,42 @@ export default function App() {
             <div className="hidden lg:block">
               <p className="text-sm font-medium text-muted">Tuesday, May 14</p>
               <h1 className="mt-1 font-display text-3xl font-bold tracking-tight">
-                Good morning, Eunice.
+                Good morning, {user?.name.split(" ")[0] || "there"}.
               </h1>
             </div>
-            <button className="flex items-center gap-3 rounded-full border border-line bg-white p-1.5 pr-3 shadow-sm">
+            <button
+              className="flex items-center gap-3 rounded-full border border-line bg-white p-1.5 pr-3 shadow-sm disabled:opacity-60"
+              disabled={isSigningOut}
+              onClick={handleLogout}
+              type="button"
+            >
               <span className="grid size-9 place-items-center rounded-full bg-sun text-sm font-bold">
-                MW
+                {user?.name
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((part) => part[0])
+                  .join("")
+                  .toUpperCase()}
               </span>
               <span className="hidden text-sm font-semibold sm:inline">
-                Eunice
+                {user?.name}
               </span>
-              <Icon name="chevron" className="size-4 rotate-90 text-muted" />
+              <span className="text-sm font-bold text-brand">
+                {isSigningOut ? "Signing out..." : "Sign out"}
+              </span>
             </button>
           </header>
+
+          {authError && (
+            <p className="mt-4 text-sm font-medium text-red-700" role="alert">
+              {authError}
+            </p>
+          )}
 
           <div className="mt-8 lg:hidden">
             <p className="text-sm font-medium text-muted">Tuesday, May 14</p>
             <h1 className="mt-1 font-display text-3xl font-bold tracking-tight">
-              Good morning, Eunice.
+              Good morning, {user?.name.split(" ")[0] || "there"}.
             </h1>
           </div>
 

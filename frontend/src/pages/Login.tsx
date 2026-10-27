@@ -1,23 +1,37 @@
-import type { FormEvent } from "react"
+import { useState, type FormEvent } from "react"
 
 export type LoginCredentials = {
   phoneNumber: string
   password: string
+  remember: boolean
 }
 
 type LoginProps = {
-  onSubmit: (credentials: LoginCredentials) => void
+  onSubmit: (credentials: LoginCredentials) => Promise<void>
 }
 
 export default function Login({ onSubmit }: LoginProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState("")
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
-    onSubmit({
+    setErrorMessage("")
+    setIsSubmitting(true)
+
+    void onSubmit({
       phoneNumber: String(formData.get("phoneNumber")),
       password: String(formData.get("password")),
+      remember: formData.get("remember") === "on",
     })
+      .catch((error: unknown) => {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Unable to sign in. Please try again.",
+        )
+      })
+      .finally(() => setIsSubmitting(false))
   }
 
   return (
@@ -93,11 +107,18 @@ export default function Login({ onSubmit }: LoginProps) {
             </a>
           </div>
 
+          {errorMessage && (
+            <p className="text-sm font-medium text-red-700" role="alert">
+              {errorMessage}
+            </p>
+          )}
+
           <button
-            className="w-full rounded-2xl bg-brand py-4 text-sm font-bold text-white shadow-button transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
+            className="w-full rounded-2xl bg-brand py-4 text-sm font-bold text-white shadow-button transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isSubmitting}
             type="submit"
           >
-            Sign in
+            {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
         </form>
 

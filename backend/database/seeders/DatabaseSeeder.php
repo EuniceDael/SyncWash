@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
         User::create([
             'name' => 'syncwash',
             'phone' => '09924790549',
-            'password' => 'eunicedaeladmin12345',
+            'password' => ' ',
             'role' => 'admin',
         ]);
 
